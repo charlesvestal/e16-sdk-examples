@@ -309,7 +309,7 @@ else()
 
     # Safety gate: OXI's only hard rule is that nothing but OXI's own
     # bootloader writes the E16's internal (MCU) flash at runtime
-    # (README's safety model). This fails the build if any internal-
+    # (docs/safety.md). This fails the build if any internal-
     # flash HAL symbol actually linked into launcher.elf, or any raw
     # FLASH register access in src/ (tools/check_no_flash_writes.sh).
     # The SDK's HAL_FLASH module may still be compiled into e16_bsp;

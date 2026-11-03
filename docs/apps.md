@@ -101,7 +101,7 @@ if (E16_API_HAS(api, audio_start))
 
 - **Where it goes**: wherever the built-in synth would play: the USB
   audio input while a computer is connected. TRS 2 audio is off in the
-  default build (README "USB audio"), so with no computer it plays
+  default build ([usb-audio.md](usb-audio.md)), so with no computer it plays
   nowhere. Mono, 48 kHz. If the app also
   plays the synth voice (`synth_note`), the two are summed.
 - **Level**: the samples are clamped to [-1, 1] and otherwise passed
@@ -221,7 +221,7 @@ at build time, that nothing in the image needs more than that; the
 device-side loader then doesn't have to handle anything it wasn't already
 checked for. The own-folder-only rule and the API's lack of any flash
 function follow the same firmware-wide promise the launcher itself keeps
-(README's "Safety model"): nothing but OXI's bootloader ever writes the
+([safety.md](safety.md)): nothing but OXI's bootloader ever writes the
 E16's internal flash, and nothing an app does through the API should be
 able to interfere with another app's or the launcher's own files on disk.
 

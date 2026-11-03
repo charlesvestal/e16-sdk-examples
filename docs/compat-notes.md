@@ -67,8 +67,8 @@ listening (`external/oxi-e16-lua/docs/e16-lua-notes.md`, from OXI's guide,
 not checked on a 1.3.0 device). The mock's `midi.listen` is a no-op and it
 never delivers input, so the suites don't exercise any of it, and before
 this the runtime had no `midi.listen` at all (a 1.3.0 script calling it
-failed). The runtime now implements it as described in README.md
-("Launcher APIs", MIDI in), covered by `test/rt/midiin_spec.lua`. What the
+failed). The runtime now implements it as described in
+[scripting.md](scripting.md) ("Launcher APIs", MIDI in), covered by `test/rt/midiin_spec.lua`. What the
 notes leave open, and this runtime chose:
 
 - port numbers: 1 = USB, 2 = TRS in (USB matches `midi.sendMidi`'s out 1);

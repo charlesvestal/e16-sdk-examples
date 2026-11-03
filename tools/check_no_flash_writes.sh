@@ -66,14 +66,14 @@ if [ -n "$hits" ]; then
     echo "check_no_flash_writes: internal-flash HAL symbols are LINKED into $elf:" >&2
     echo "$hits" | sed 's/^/    /' >&2
     echo "Only OXI's bootloader may write internal flash at runtime -- nothing in" >&2
-    echo "this firmware may call these, even indirectly (README's safety model)." >&2
+    echo "this firmware may call these, even indirectly (docs/safety.md)." >&2
     status=1
 fi
 
 # ---- 2. raw register access in source ----
 #
 # Excludes comments mentioning these names in prose (this file and
-# README.md do); a real grep over src/ is cheap enough not to need
+# docs/safety.md do); a real grep over src/ is cheap enough not to need
 # anything fancier than "appears outside a // or a block comment" --
 # in practice these registers are never named in this codebase's
 # comments either, so a plain grep is enough and avoids false negatives

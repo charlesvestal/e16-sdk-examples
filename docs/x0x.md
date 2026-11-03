@@ -6,7 +6,7 @@ sequencer with 16 patterns, swing, accent and slide, MIDI clock in and
 out. It's a port of the user's X0X groovebox (tbd-x0x, for the TBD-16;
 it descends from X0X for the M-VAVE FM-1), cut down to fit a native app.
 It plays through the app audio stream (`audio_start()`, `docs/apps.md`):
-the E16's USB audio input while a computer is connected (TRS 2 audio is off in the default build; see README "USB audio").
+the E16's USB audio input while a computer is connected (TRS 2 audio is off in the default build; see [usb-audio.md](usb-audio.md)).
 `docs/audio/x0x-demo.wav` is 10 s of it, rendered on the host by
 `test/x0x/x0x_test.c --wav` (the factory loop, a cutoff sweep, then
 closed hats and a new TB-3PO line).
@@ -177,8 +177,7 @@ push 16. With
 the factory loop and ordinary patterns the guard stays at 0.
 
 Two things made the room: the 303 at 1x (above), and a launcher change:
-app mode now runs app code from SRAM1's alias at 0 (README, "Native
-apps"), which made x0x's engine about 25 % faster.
+app mode now runs app code from SRAM1's alias at 0 ([app-runtime.md](app-runtime.md)), which made x0x's engine about 25 % faster.
 
 ## Files
 
