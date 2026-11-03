@@ -1,0 +1,13 @@
+# Scripts embedded in the firmware, in menu order (tools/embed_scripts.py).
+# file (a bare name: in external/oxi-e16-lua/; with a "/": under scripts/)
+#                                   menu title / default header   page names   pad pages   settings page
+euclid.lua   Euclid   Pat,Set                                                 1  2
+lfo.lua      LFOx16   L1-4,L5-8,L9-12,L13-16,Set                              4  5
+chords.lua   Chords   Cin,Chl,Gos,Neo,Lof,Ind,Det,Lsh,Pop,Imp,Sad,Set         11 12
+modseq.lua   Mod Seq  Seq,Set                                                 1  2
+noteseq.lua  Note Seq Seq,Set                                                 1  2
+tb3po.lua    TB-3PO   Seq,Set                                                 1  2
+demos/canvas.lua   Canvas   P1                                            1  0
+demos/rings.lua    Rings    P1                                            1  0
+demos/acid.lua     Acid     P1                                            1  0
+demos/midimon.lua  MIDI Mon P1                                            1  0

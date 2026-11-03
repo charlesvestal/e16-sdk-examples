@@ -1,0 +1,42 @@
+E16 Launcher
+Copyright (c) 2026 Charles Vestal. MIT license (see LICENSE).
+
+This repository includes or links the third-party components below.
+Each keeps its own license; LICENSE does not apply to them.
+
+external/lua         Lua 5.4.7. Copyright (C) 1994-2024 Lua.org, PUC-Rio.
+                     MIT license (see the notice at the end of lua.h).
+
+external/tlsf        TLSF memory allocator, by Matthew Conte. BSD license
+                     (see tlsf.c).
+
+external/fatfs       FatFs R0.15, by ChaN. FatFs license, BSD-style
+                     (see external/fatfs/LICENSE.txt).
+
+external/oxi-e16-lua The oxi-e16-lua scripts, by Charles Vestal. MIT
+                     license, except tb3po.lua, which is GPL-3.0 (see that
+                     repository's LICENSE and LICENSES/). Some of these
+                     scripts are embedded in the firmware image, so a
+                     firmware build that includes tb3po.lua carries
+                     GPL-3.0 code.
+
+apps/x0x             x0x-lite, a groovebox app (an 808 kit and a 303 with
+                     TB-3PO) ported from X0X by Charles Vestal. GPL-3.0-only
+                     (the exception to LICENSE above, because X0X is GPL): see apps/x0x/LICENSE and
+                     apps/x0x/LICENSING.md (its origins: Open303, MIT; 8W8,
+                     schwung-303 and schwung-tb3po / TB_3PO, GPL-3.0). It is
+                     built into its own x0x.e16app, which the launcher loads
+                     at run time; the launcher firmware contains none of it.
+
+external/E16-SDK     E16 SDK, Copyright (c) 2026 OXI Instruments. MIT
+                     license (see external/E16-SDK/LICENSE). It brings in
+                     TinyUSB (MIT), and ST's CMSIS, device headers and
+                     STM32F4 HAL (Apache-2.0 and BSD-3-Clause), each under
+                     its own license.
+                     The launcher also compiles three of the SDK's
+                     examples into the firmware (usb_msc.c, usb_audio.c,
+                     usb_video.c, from examples/usb_disk, usb_tone and
+                     usb_cam), unchanged, under the SDK's license.
+
+Written with Claude Code (Anthropic) under the author's direction, and
+tested on E16 hardware.

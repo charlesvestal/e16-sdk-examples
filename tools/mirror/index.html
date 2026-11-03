@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>E16 Mirror</title>
+<!--
+  A live view of an OXI E16 running the e16-launcher, over USB MIDI (Web MIDI).
+  Shows the OLED, the 16 LED rings and every encoder/Shift event, and lets you
+  turn, push and hold from here. One self-contained file: no build step, no
+  external files. The protocol is in src/mirror/mirror_core.h; README "Mirror".
+  ?demo animates sample data without an E16 (or a browser with Web MIDI).
+-->
+<style>
+:root {
+  --page: #0b0c0e;
+  --panel-hi: #2b2c2f;
+  --panel-lo: #1c1d20;
+  --edge: #34373d;
+  --ink: #e4e6ea;
+  --muted: #8b9099;
+  --faint: #5b6068;
+  --led-off: #cbc5ba;        /* an unlit LED: the pale diffuser on the dark panel */
+  --print: #d9d5cc;          /* the panel's printing (the Shift "O") */
+  --ok: #4cd07d;
+  --warn: #f0b44c;
+  --bad: #ff6b6b;
+  --remote: #ffb347;
+  --device: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--page); color: var(--ink); }
+body {
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  background: radial-gradient(1200px 600px at 50% -10%, #1a1c20 0%, var(--page) 60%) fixed;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 600px; margin: 0 auto; padding: 20px 16px 40px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.brand { display: flex; align-items: baseline; gap: 8px; font-weight: 600; letter-spacing: .02em; }
+.brand b { font-size: 18px; }
+.brand span { color: var(--muted); font-weight: 500; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
+  background: #16171a; border: 1px solid var(--edge); color: var(--muted); font-size: 12.5px; white-space: nowrap;
+  max-width: 62vw; overflow: hidden; text-overflow: ellipsis;
+}
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.pill[data-s="live"] { color: var(--ink); }
+.pill[data-s="live"] i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.pill[data-s="wait"] i { background: var(--warn); animation: blink 1.2s infinite; }
+.pill[data-s="bad"] i { background: var(--bad); }
+.pill[data-s="demo"] i { background: var(--remote); }
+@keyframes blink { 50% { opacity: .3; } }
+
+.notice {
+  border: 1px solid var(--edge); background: #141518; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+  color: var(--ink);
+}
+.notice h2 { margin: 0 0 4px; font-size: 15px; }
+.notice p { margin: 4px 0; color: var(--muted); }
+.notice a { color: var(--remote); }
+.notice code { color: var(--ink); background: #1f2125; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
+/* ---------- the panel ---------- */
+.stage { position: relative; padding-top: 46px; }          /* room for the cable */
+.cable {                                                    /* USB-C, out of the top edge */
+  position: absolute; top: 0; left: 50%; width: 12px; height: 34px; margin-left: -6px;
+  border-radius: 6px 6px 0 0; background: linear-gradient(90deg, #121214, #2d2e32 45%, #121214);
+}
+.cable::after {                                             /* the plug's boot */
+  content: ""; position: absolute; left: -7px; right: -7px; bottom: -12px; height: 16px; border-radius: 4px;
+  background: linear-gradient(90deg, #17181a, #3a3b40 45%, #17181a);
+  box-shadow: 0 2px 4px rgba(0,0,0,.6);
+}
+.device {
+  position: relative; border-radius: 28px; padding: 5.5% 4.5% 7%;
+  background: linear-gradient(170deg, var(--panel-hi), var(--panel-lo) 75%);
+  border: 1px solid #383a3f;
+  box-shadow: 0 1px 0 rgba(255,255,255,.07) inset, 0 -2px 0 rgba(0,0,0,.45) inset, 0 28px 70px rgba(0,0,0,.6);
+}
+.panel { display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 1.5%; }
+.head { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 3fr; align-items: start; margin-bottom: 5%; }
+.logo { display: flex; justify-content: center; padding-top: 2%; }
+.screen { display: flex; justify-content: center; }
+.bezel {
+  background: #050506; border-radius: 4px; padding: 6px;
+  box-shadow: 0 0 0 1px #000, 0 1px 0 rgba(255,255,255,.06), inset 0 2px 6px rgba(0,0,0,.9);
+}
+#oled { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* Shift: the round "O" printed at the top left. */
+.shift {
+  appearance: none; border: 0; background: none; padding: 0; margin: 0; cursor: pointer; color: inherit;
+  width: 58%; max-width: 64px; touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent; border-radius: 50%;
+}
+.shift svg { display: block; width: 100%; height: auto; overflow: visible; }
+.shift .o { fill: none; stroke: var(--print); stroke-width: 7; transition: stroke .12s, filter .12s; }
+.shift .fill { fill: transparent; transition: fill .12s; }
+.shift.down .o { filter: drop-shadow(0 0 6px currentColor); }
+.shift.down.dev { color: var(--device); }
+.shift.down.dev .o { stroke: var(--device); }
+.shift.down.dev .fill { fill: rgba(255,255,255,.22); }
+.shift.down.rem { color: var(--remote); }
+.shift.down.rem .o { stroke: var(--remote); }
+.shift.down.rem .fill { fill: rgba(255,179,71,.22); }
+.shift:focus-visible, .enc:focus-visible { outline: 2px solid var(--remote); outline-offset: 2px; }
+
+/* Encoders: endless, so no pointer -- a turn shows as a glow on its side
+ * and a shift of the knurling. */
+.enc {
+  appearance: none; border: 0; background: none; padding: 0; margin: 0; cursor: grab; position: relative;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  color: inherit; border-radius: 50%;
+}
+.enc:active { cursor: grabbing; }
+.enc svg { display: block; width: 100%; height: auto; overflow: visible; }
+.enc .body { transition: transform .08s; }
+.enc .knurl { transition: transform .12s ease-out; }
+.enc .knurl line { stroke: #34353a; stroke-width: 1.4; }
+.enc .arc { fill: none; stroke-width: 3.2; stroke-linecap: round; opacity: 0; transition: opacity .4s; }
+.enc .arc.on { opacity: .95; transition: opacity 0s; }
+.enc .arc.dev { stroke: var(--device); }
+.enc .arc.rem { stroke: var(--remote); }
+.enc.pressed .body { transform: scale(.93); }
+.enc.pressed .top { fill: url(#topdown); }
+.enc .led { stroke: rgba(0,0,0,.35); stroke-width: .5; }
+
+.info { display: flex; align-items: baseline; gap: 10px; margin-top: 16px; min-width: 0; }
+.info .k { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); flex: none; }
+.info .v { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.info .s { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+
+.log { margin-top: 18px; }
+.log h2, .settings summary { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--faint); font-weight: 600; margin: 0 0 8px; }
+#events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-height: 2em; }
+#events li {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #141518;
+  border: 1px solid #202227; font-variant-numeric: tabular-nums; font-size: 13px;
+}
+#events li:first-child { border-color: #2e3137; }
+#events .t { color: var(--faint); font-size: 11.5px; width: 4.6em; flex: none; }
+#events .x { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#events .src { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid #33363c; color: var(--muted); }
+#events .src.rem { color: var(--remote); border-color: rgba(255,179,71,.4); }
+#events .empty { color: var(--faint); background: none; border: 0; padding-left: 0; }
+
+.settings { margin-top: 18px; color: var(--muted); }
+.settings summary { cursor: pointer; list-style: none; margin: 0; }
+.settings summary::-webkit-details-marker { display: none; }
+.settings summary::before { content: "▸ "; }
+.settings[open] summary::before { content: "▾ "; }
+.settings .row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-top: 10px; font-size: 13px; }
+.settings select { background: #16171a; color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; padding: 4px 6px; font: inherit; }
+.settings p { font-size: 12.5px; margin: 10px 0 0; }
+footer { margin-top: 22px; color: var(--faint); font-size: 12px; }
+footer a { color: var(--muted); }
+
+@media (max-width: 540px) {
+  .wrap { padding: 14px 16px 32px; }
+  .stage { padding-top: 38px; }
+  .cable { height: 28px; }
+  .device { border-radius: 20px; }
+  .bezel { padding: 4px; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="top">
+    <div class="brand"><b>E16</b><span>Mirror</span></div>
+    <div id="pill" class="pill" data-s="wait" role="status" aria-live="polite"><i></i><span>Starting…</span></div>
+  </header>
+
+  <section id="notice" class="notice" hidden></section>
+
+  <div class="stage">
+    <div class="cable" aria-hidden="true"></div>
+    <section class="device" aria-label="E16">
+      <div class="panel" id="panel">
+        <div class="head">
+          <div class="logo">
+            <button id="shift" class="shift" type="button" aria-label="Shift (hold)" title="Shift (hold)">
+              <svg viewBox="-50 -50 100 100" aria-hidden="true">
+                <circle class="fill" r="40"/>
+                <circle class="o" r="40"/>
+              </svg>
+            </button>
+          </div>
+          <div class="screen"><div class="bezel"><canvas id="oled" width="128" height="64" role="img" aria-label="The E16's screen"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="info" aria-live="off">
+    <span class="k" id="modeK">Mode</span>
+    <span class="v" id="modeV">—</span>
+    <span class="s" id="modeS">&nbsp;</span>
+  </div>
+
+  <section class="log" aria-label="Events">
+    <h2>Events</h2>
+    <ol id="events"><li class="empty">Turn or push a knob — on the E16 or here.</li></ol>
+  </section>
+
+  <details class="settings">
+    <summary>Settings</summary>
+    <div class="row">
+      <label>LED 1 of each ring
+        <select id="ledDir">
+          <option value="1">at 7 o'clock, running clockwise</option>
+          <option value="-1">at 5 o'clock, running counter-clockwise</option>
+        </select>
+      </label>
+    </div>
+    <p>The launcher fills a ring from LED 1 clockwise, like a knob's travel; OXI hasn't confirmed the physical order yet, so if the rings here run the other way round than on the E16, flip it here (kept in this browser).</p>
+    <p>Mouse: scroll or drag up/down on a knob to turn it, click to push, hold to keep it pushed; hold the “O” at the top left for Shift. Keyboard: Tab to a knob, arrows to turn, Space to push.</p>
+  </details>
+
+  <footer>Anything that can send MIDI to the E16 can watch and drive it while the mirror is built in. · <a href="?demo">Demo</a></footer>
+</main>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="top" cx="42%" cy="34%" r="72%">
+      <stop offset="0" stop-color="#2c2d31"/><stop offset=".6" stop-color="#18191b"/><stop offset="1" stop-color="#0c0c0d"/>
+    </radialGradient>
+    <radialGradient id="topdown" cx="50%" cy="50%" r="70%">
+      <stop offset="0" stop-color="#1a1b1d"/><stop offset="1" stop-color="#080809"/>
+    </radialGradient>
+    <linearGradient id="skirt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2b2f"/><stop offset="1" stop-color="#070708"/>
+    </linearGradient>
+    <filter id="glow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="3.2"/>
+    </filter>
+  </defs>
+</svg>
+
+<script>
+"use strict";
+(() => {
+  const SYSEX = [0xF0, 0x7D, 0x45];
+  const IN = { SUB: 0x20, UNSUB: 0x21, CTL: 0x10 };
+  const OUT = { STATE: 0x70, OLED: 0x71, RING: 0x72, EVENT: 0x73, SYNC: 0x74 };
+  const MODES = ["Menu", "Script", "Error", "Disk mode", "Webcam", "App"];
+  const SHIFT = 16;
+  const KNURL_PER_STEP = 6;     /* degrees the knurling moves per detent (cosmetic) */
+  const LED_MAX = 85;           /* the launcher keeps LED levels at or under this */
+  const LED_R = 45;             /* ring radius, knob units (the knob's is 30) */
+  const LED_FIRST = 210;        /* LED 1 at 7 o'clock (degrees clockwise from 12) */
+  const LED_STEP = 20;          /* 16 LEDs over 300 degrees: a gap at the bottom */
+  const PARAMS = new URLSearchParams(location.search);
+  const DEMO = PARAMS.has("demo");
+  const STILL = DEMO && PARAMS.has("still");
+
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("e16mirror." + k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem("e16mirror." + k, v); } catch (e) { /* private mode */ } },
+  };
+
+  /* ---------- state ---------- */
+  const fb = new Uint8Array(1024);                      /* page-major, SSD1306 layout */
+  const rings = Array.from({ length: 16 }, () => new Uint8Array(48));
+  let oledDirty = true;
+  const ringDirty = new Set();
+  let frames = 0, fps = 0, lastData = 0;
+
+  /* ---------- OLED ---------- */
+  const oled = $("oled");
+  const octx = oled.getContext("2d");
+  const img = octx.createImageData(128, 64);
+  function drawOled() {
+    const d = img.data;
+    for (let page = 0; page < 8; page++) {
+      for (let x = 0; x < 128; x++) {
+        const b = fb[page * 128 + x];
+        for (let bit = 0; bit < 8; bit++) {
+          const i = (((page * 8 + bit) * 128) + x) * 4;
+          const on = (b >> bit) & 1;
+          d[i] = on ? 238 : 0; d[i + 1] = on ? 244 : 0; d[i + 2] = on ? 255 : 0; d[i + 3] = 255;
+        }
+      }
+    }
+    octx.putImageData(img, 0, 0);
+  }
+  /* As wide as the screen's place over knob columns 2-4 allows, in whole
+   * device pixels per OLED pixel, so every pixel comes out the same size. */
+  function sizeOled() {
+    const cell = document.querySelector(".screen");
+    const bezel = document.querySelector(".bezel");
+    const pad = bezel.offsetWidth - bezel.clientWidth + parseFloat(getComputedStyle(bezel).paddingLeft) * 2;
+    const avail = cell.clientWidth * 0.86 - pad;
+    const dpr = window.devicePixelRatio || 1;
+    const k = Math.max(1, Math.floor((avail * dpr) / 128)) / dpr;
+    oled.style.width = 128 * k + "px";
+    oled.style.height = 64 * k + "px";
+  }
+
+  /* ---------- encoders ---------- */
+  const panel = $("panel");
+  const encs = [];
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  /* An arc of radius r from a0 to a1 (degrees clockwise from 12 o'clock). */
+  function arcPath(r, a0, a1) {
+    const p = (a) => [(r * Math.sin(a * Math.PI / 180)).toFixed(2), (-r * Math.cos(a * Math.PI / 180)).toFixed(2)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    return `M${x0} ${y0}A${r} ${r} 0 0 ${a1 > a0 ? 1 : 0} ${x1} ${y1}`;
+  }
+  for (let i = 0; i < 16; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "enc";
+    b.setAttribute("aria-label", `Encoder ${i + 1}`);
+    b.title = `Encoder ${i + 1}`;
+    const svg = el("svg", { viewBox: "-56 -56 112 112" }, b);
+    const leds = el("g", {}, svg);
+    const halos = [], dots = [];
+    for (let l = 0; l < 16; l++) halos.push(el("ellipse", { rx: 5, ry: 7.5, fill: "transparent", filter: "url(#glow)" }, leds));
+    for (let l = 0; l < 16; l++) dots.push(el("ellipse", { class: "led", rx: 1.9, ry: 3.6, fill: "var(--led-off)" }, leds));
+    /* the turn glow: clockwise on the right, counter-clockwise on the left */
+    const arcCw = el("path", { class: "arc", d: arcPath(37, 25, 115) }, svg);
+    const arcCcw = el("path", { class: "arc", d: arcPath(37, -25, -115) }, svg);
+    const body = el("g", { class: "body" }, svg);
+    el("circle", { cy: 2.5, r: 32, fill: "#000", opacity: .55 }, body);       /* shadow */
+    el("circle", { r: 31, fill: "url(#skirt)" }, body);
+    const knurl = el("g", { class: "knurl" }, body);
+    for (let k = 0; k < 60; k++) {
+      const a = k * 6 * Math.PI / 180;
+      el("line", { x1: (26.5 * Math.sin(a)).toFixed(2), y1: (-26.5 * Math.cos(a)).toFixed(2),
+        x2: (30.6 * Math.sin(a)).toFixed(2), y2: (-30.6 * Math.cos(a)).toFixed(2) }, knurl);
+    }
+    el("circle", { class: "top", r: 25.5, fill: "url(#top)" }, body);
+    el("circle", { r: 25.5, fill: "none", stroke: "rgba(255,255,255,.05)", "stroke-width": 1 }, body);
+    panel.appendChild(b);
+    encs.push({ b, halos, dots, knurl, arcCw, arcCcw, angle: 0, arcTimer: 0, held: false, devDown: false, remDown: false });
+  }
+
+  function placeLeds() {
+    const dir = +$("ledDir").value;
+    for (const e of encs) {
+      for (let l = 0; l < 16; l++) {
+        const deg = dir > 0 ? LED_FIRST + l * LED_STEP : 360 - LED_FIRST - l * LED_STEP;
+        const a = deg * Math.PI / 180;
+        const x = (LED_R * Math.sin(a)).toFixed(2), y = (-LED_R * Math.cos(a)).toFixed(2);
+        const t = `translate(${x} ${y}) rotate(${deg})`;      /* long axis pointing at the knob */
+        e.dots[l].setAttribute("transform", t);
+        e.halos[l].setAttribute("transform", t);
+      }
+    }
+  }
+  $("ledDir").value = store.get("ledDir", "1");
+  $("ledDir").addEventListener("change", () => { store.set("ledDir", $("ledDir").value); placeLeds(); });
+  placeLeds();
+
+  /* An LED's level (0-85 on the device) to how it looks: the colour at
+   * full saturation, over the pale diffuser as it gets brighter. */
+  const OFF = [203, 197, 186];
+  function ledColour(R, G, B) {
+    const m = Math.max(R, G, B);
+    const lvl = Math.min(1, m / LED_MAX);
+    const k = 255 / m;
+    const hue = [R * k, G * k, B * k];
+    const t = 0.55 + 0.45 * Math.sqrt(lvl);
+    const c = hue.map((h, j) => Math.round(OFF[j] + (h - OFF[j]) * t));
+    return { c: `rgb(${c[0]},${c[1]},${c[2]})`, h: `rgb(${hue.map(Math.round).join(",")})`, glow: 0.35 + 0.6 * Math.sqrt(lvl) };
+  }
+  function drawRing(r) {
+    const e = encs[r], v = rings[r];
+    for (let l = 0; l < 16; l++) {
+      const R = v[l * 3], G = v[l * 3 + 1], B = v[l * 3 + 2];
+      if (R + G + B === 0) {
+        e.dots[l].setAttribute("fill", "var(--led-off)");
+        e.halos[l].setAttribute("fill", "transparent");
+      } else {
+        const L = ledColour(R, G, B);
+        e.dots[l].setAttribute("fill", L.c);
+        e.halos[l].setAttribute("fill", L.h);
+        e.halos[l].setAttribute("fill-opacity", L.glow.toFixed(2));
+      }
+    }
+  }
+
+  function glowArc(e, arc, remote) {
+    for (const a of [e.arcCw, e.arcCcw]) a.classList.remove("on", "dev", "rem");
+    void arc.getBoundingClientRect();
+    arc.classList.add("on", remote ? "rem" : "dev");
+    clearTimeout(e.arcTimer);
+    if (!STILL) e.arcTimer = setTimeout(() => arc.classList.remove("on"), 140);
+  }
+  function showTurn(i, steps, remote) {
+    const e = encs[i];
+    e.angle += steps * KNURL_PER_STEP;
+    e.knurl.style.transform = `rotate(${e.angle}deg)`;
+    glowArc(e, steps > 0 ? e.arcCw : e.arcCcw, remote);
+  }
+  function showButton(i, down, remote) {
+    if (i === SHIFT) {
+      const s = $("shift");                               /* held here: stays lit */
+      s.classList.toggle("down", down || shiftHeld);
+      s.classList.toggle("dev", down && !remote && !shiftHeld);
+      s.classList.toggle("rem", shiftHeld || (down && remote));
+      return;
+    }
+    const e = encs[i];
+    if (remote) e.remDown = down; else e.devDown = down;
+    e.b.classList.toggle("pressed", e.devDown || e.remDown || e.held);
+  }
+
+  /* ---------- event log ---------- */
+  const evList = $("events");
+  const t0 = performance.now();
+  function logEvent(text, remote) {
+    const empty = evList.querySelector(".empty");
+    if (empty) empty.remove();
+    const li = document.createElement("li");
+    const s = (performance.now() - t0) / 1000;
+    const mm = Math.floor(s / 60), ss = (s % 60).toFixed(1).padStart(4, "0");
+    li.innerHTML = `<span class="t">${mm}:${ss}</span><span class="x"></span><span class="src${remote ? " rem" : ""}">${remote ? "remote" : "device"}</span>`;
+    li.querySelector(".x").textContent = text;
+    evList.prepend(li);
+    while (evList.children.length > 10) evList.lastElementChild.remove();
+  }
+  function ctlName(i) { return i === SHIFT ? "Shift" : `Encoder ${i + 1}`; }
+
+  /* ---------- protocol ---------- */
+  function unpack7(p, off, end) {
+    const out = [];
+    for (let i = off; i < end; i += 8) {
+      const top = p[i];
+      for (let j = 1; j < 8 && i + j < end; j++) out.push(p[i + j] | (((top >> (j - 1)) & 1) << 7));
+    }
+    return out;
+  }
+  function onSysex(d) {
+    if (d.length < 5 || d[0] !== 0xF0 || d[1] !== 0x7D || d[2] !== 0x45) return;
+    const cmd = d[3], end = d.length - 1;
+    switch (cmd) {
+      case OUT.OLED: {
+        const page = d[4], col = d[5], seg = unpack7(d, 6, end);
+        if (page < 8 && col + seg.length <= 128) { fb.set(seg, page * 128 + col); oledDirty = true; }
+        break;
+      }
+      case OUT.RING: {
+        const r = d[4], v = unpack7(d, 5, end);
+        if (r < 16 && v.length === 48) { rings[r].set(v); ringDirty.add(r); }
+        break;
+      }
+      case OUT.EVENT: {
+        const kind = d[4], i = d[5], val = d[6], remote = d[7] === 1;
+        if (i > SHIFT) break;
+        if (kind === 0) {
+          const steps = val - 64;
+          if (i < 16) showTurn(i, steps, remote);
+          logEvent(`${ctlName(i)} turned ${steps > 0 ? "+" : ""}${steps}`, remote);
+        } else {
+          showButton(i, val === 1, remote);
+          logEvent(`${ctlName(i)} ${val ? "down" : "up"}`, remote);
+        }
+        break;
+      }
+      case OUT.STATE: {
+        const mode = d[5];
+        let k = 7, ver = "", name = "";
+        while (k < end && d[k] !== 0) ver += String.fromCharCode(d[k++]);
+        for (k++; k < end; k++) name += String.fromCharCode(d[k]);
+        showState(mode, name, ver, (d[6] & 1) !== 0);
+        break;
+      }
+      case OUT.SYNC:
+        frames++;
+        break;
+      default:
+        return;
+    }
+    lastData = performance.now();
+    if (connected && pill.dataset.s !== "live" && !DEMO) setPill("live", `Live · ${portName}`);
+  }
+
+  let remoteOk = true;
+  function showState(mode, name, ver, remote) {
+    remoteOk = remote;
+    const m = MODES[mode] || `Mode ${mode}`;
+    $("modeK").textContent = mode === 0 ? "Menu" : name ? m : "Mode";
+    $("modeV").textContent = name || (mode === 0 ? "—" : m);
+    $("modeS").dataset.ver = ver;
+    updateStats();
+  }
+  function updateStats() {
+    const ver = $("modeS").dataset.ver;
+    $("modeS").textContent = (ver ? `launcher ${ver} · ` : "") + `${fps} fps`;
+  }
+  setInterval(() => { fps = frames; frames = 0; if (!STILL) updateStats(); }, 1000);
+
+  /* ---------- sending ---------- */
+  let output = null, input = null, connected = false, portName = "";
+  function send(bytes) {
+    if (DEMO) { demo.receive(bytes); return; }
+    if (!output) return;
+    try { output.send(bytes); } catch (e) { /* port went away; statechange handles it */ }
+  }
+  function sendCtl(ctl, act, n = 64) { send([...SYSEX, IN.CTL, ctl, act, n, 0xF7]); }
+  function subscribe(full) { send(full ? [...SYSEX, IN.SUB, 1, 0xF7] : [...SYSEX, IN.SUB, 0xF7]); }
+  function unsubscribe() { send([...SYSEX, IN.UNSUB, 0xF7]); }
+
+  /* Turns from the page, gathered per encoder and sent every 20 ms. */
+  const pendingSteps = new Array(16).fill(0);
+  setInterval(() => {
+    for (let i = 0; i < 16; i++) {
+      let s = pendingSteps[i];
+      if (!s) continue;
+      s = Math.max(-63, Math.min(63, s));
+      pendingSteps[i] -= s;
+      sendCtl(i, 2, 64 + s);
+    }
+  }, 20);
+  function turn(i, steps) { pendingSteps[i] += steps; }
+
+  /* A held press is sent again every second: the E16 lets go of a remote
+   * press it hasn't heard about for 3 s. */
+  const holding = new Set();
+  setInterval(() => { for (const c of holding) sendCtl(c, 1); }, 1000);
+  function press(ctl, down) {
+    if (down) holding.add(ctl); else holding.delete(ctl);
+    if (ctl < 16) { encs[ctl].held = down; encs[ctl].b.classList.toggle("pressed", down || encs[ctl].devDown || encs[ctl].remDown); }
+    sendCtl(ctl, down ? 1 : 0);
+  }
+
+  /* ---------- input on the knobs ---------- */
+  const DRAG_PX = 9, HOLD_MS = 140, TAP_MS = 80, WHEEL_PX = 80;
+  encs.forEach((e, i) => {
+    const b = e.b;
+    let st = null, wheel = 0;
+    b.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      b.setPointerCapture(ev.pointerId);
+      st = { y: ev.clientY, y0: ev.clientY, moved: false, pushed: false };
+      st.timer = setTimeout(() => { if (st && !st.moved) { st.pushed = true; press(i, true); } }, HOLD_MS);
+    });
+    b.addEventListener("pointermove", (ev) => {
+      if (!st) return;
+      if (!st.moved && Math.abs(ev.clientY - st.y0) > 4) st.moved = true;
+      if (!st.moved) return;
+      while (st.y - ev.clientY >= DRAG_PX) { turn(i, 1); st.y -= DRAG_PX; }
+      while (ev.clientY - st.y >= DRAG_PX) { turn(i, -1); st.y += DRAG_PX; }
+    });
+    const up = () => {
+      if (!st) return;
+      clearTimeout(st.timer);
+      if (st.pushed) press(i, false);
+      else if (!st.moved) { press(i, true); setTimeout(() => press(i, false), TAP_MS); }
+      st = null;
+    };
+    b.addEventListener("pointerup", up);
+    b.addEventListener("pointercancel", up);
+    b.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const px = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaMode === 2 ? ev.deltaY * 400 : ev.deltaY;
+      wheel -= px;
+      while (wheel >= WHEEL_PX) { turn(i, 1); wheel -= WHEEL_PX; }
+      while (wheel <= -WHEEL_PX) { turn(i, -1); wheel += WHEEL_PX; }
+    }, { passive: false });
+    b.addEventListener("keydown", (ev) => {
+      if (ev.key === "ArrowUp" || ev.key === "ArrowRight") { turn(i, 1); ev.preventDefault(); }
+      else if (ev.key === "ArrowDown" || ev.key === "ArrowLeft") { turn(i, -1); ev.preventDefault(); }
+      else if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { press(i, true); ev.preventDefault(); }
+    });
+    b.addEventListener("keyup", (ev) => {
+      if (ev.key === " " || ev.key === "Enter") { press(i, false); ev.preventDefault(); }
+    });
+    b.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  });
+
+  /* Shift: held for as long as the "O" is. */
+  const shiftBtn = $("shift");
+  let shiftHeld = false;
+  function shiftSet(down) {
+    if (down === shiftHeld) return;
+    shiftHeld = down;
+    shiftBtn.classList.toggle("down", down);
+    shiftBtn.classList.toggle("rem", down);
+    if (!down) shiftBtn.classList.remove("dev");
+    press(SHIFT, down);
+  }
+  shiftBtn.addEventListener("pointerdown", (ev) => { if (ev.button === 0) { shiftBtn.setPointerCapture(ev.pointerId); shiftSet(true); } });
+  shiftBtn.addEventListener("pointerup", () => shiftSet(false));
+  shiftBtn.addEventListener("pointercancel", () => shiftSet(false));
+  shiftBtn.addEventListener("keydown", (ev) => { if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { shiftSet(true); ev.preventDefault(); } });
+  shiftBtn.addEventListener("keyup", (ev) => { if (ev.key === " " || ev.key === "Enter") { shiftSet(false); ev.preventDefault(); } });
+  shiftBtn.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  window.addEventListener("blur", () => { shiftSet(false); for (const c of [...holding]) press(c, false); });
+
+  /* ---------- status ---------- */
+  const pill = $("pill");
+  function setPill(s, text) { pill.dataset.s = s; pill.lastElementChild.textContent = text; pill.title = text; }
+  function notice(title, html) {
+    const n = $("notice");
+    if (!title) { n.hidden = true; return; }
+    n.innerHTML = `<h2></h2>${html}`;
+    n.querySelector("h2").textContent = title;
+    n.hidden = false;
+  }
+
+  /* ---------- Web MIDI ---------- */
+  let access = null;
+  function isE16(p) { return /E16/i.test(p.name || "") && !/FW Update/i.test(p.name || ""); }
+  function pick(map) {
+    const ports = [...map.values()].filter((p) => isE16(p) && p.state !== "disconnected");
+    return ports.find((p) => /Launcher/i.test(p.name)) || ports[0] || null;
+  }
+  function attach() {
+    const i = pick(access.inputs), o = pick(access.outputs);
+    if (i === input && o === output && connected) return;
+    if (input) input.onmidimessage = null;
+    input = i; output = o;
+    connected = !!(i && o);
+    if (!connected) {
+      setPill("wait", "Looking for the E16…");
+      notice("Connect the E16", "<p>Plug the E16 in over USB, running the launcher. This page finds it by itself (a port named “E16 Launcher” or “E16 Custom”).</p>");
+      return;
+    }
+    notice(null);
+    portName = i.name;
+    input.onmidimessage = (ev) => onSysex(ev.data);
+    setPill("wait", `Connecting · ${portName}`);
+    subscribe(true);
+  }
+  setInterval(() => {
+    if (DEMO || !connected) return;
+    if (document.visibilityState === "visible") subscribe(false);
+    if (performance.now() - lastData > 7000) { /* a full refresh comes every 5 s even when nothing changes */
+      setPill("wait", `No stream from ${portName}`);
+      notice("No picture yet", "<p>The E16 is connected but isn't sending the mirror. It needs a launcher built with the mirror (<code>E16_MIRROR</code>, on by default). While it boots or switches modes this clears by itself.</p>");
+    } else if (!$("notice").hidden && /No picture/.test($("notice").textContent)) {
+      notice(null);
+    }
+  }, 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (DEMO || !connected) return;
+    if (document.visibilityState === "visible") subscribe(true); else unsubscribe();
+  });
+  window.addEventListener("pagehide", () => { if (connected) unsubscribe(); });
+
+  async function start() {
+    if (DEMO) { demo.start(); return; }
+    if (!window.isSecureContext) {
+      setPill("bad", "Needs a secure page");
+      notice("Open this page from localhost or a file", `<p>Web MIDI only works on secure pages. Run <code>tools/mirror/serve.sh</code> and open the address it prints, or open the file directly.</p><p><a href="?demo">See the demo</a></p>`);
+      return;
+    }
+    if (!navigator.requestMIDIAccess) {
+      setPill("bad", "No Web MIDI in this browser");
+      notice("This browser can't talk MIDI", `<p>The mirror uses Web MIDI, which Safari and every browser on iPhone and iPad don't have. Open this page in Chrome or Edge (desktop or Android); Firefox works too after it asks to install a site permission.</p><p><a href="?demo">See the demo</a></p>`);
+      return;
+    }
+    setPill("wait", "Asking for MIDI access…");
+    try {
+      access = await navigator.requestMIDIAccess({ sysex: true });
+    } catch (e) {
+      setPill("bad", "MIDI access blocked");
+      notice("MIDI access was blocked", `<p>The page needs MIDI with SysEx to talk to the E16. Allow it for this page (the icon at the left of the address bar, or the browser's site settings → MIDI devices), then reload.</p><p><a href="?demo">See the demo</a></p>`);
+      return;
+    }
+    access.onstatechange = attach;
+    attach();
+  }
+
+  /* ---------- drawing loop ---------- */
+  function frame() {
+    if (oledDirty) { drawOled(); oledDirty = false; }
+    for (const r of ringDirty) drawRing(r);
+    ringDirty.clear();
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener("resize", sizeOled);
+  sizeOled();
+  requestAnimationFrame(frame);
+
+  /* ---------- demo: a pretend E16 speaking the same protocol ---------- */
+  const demo = (() => {
+    const items = ["Euclid", "LFOx16", "Chords", "Mod Seq", "Note Seq", "TB-3PO", "Canvas", "Rings", "Acid", "MIDI Mon", "drone", "x0x", "Disk mode", "Webcam"];
+    let sel = 7, running = null, shiftT = 0, t = 0;
+    const pix = new Uint8Array(1024);
+    const tc = document.createElement("canvas");
+    tc.width = 128; tc.height = 64;
+    const tx = tc.getContext("2d", { willReadFrequently: true });
+    function pack7(v) {
+      const o = [];
+      for (let i = 0; i < v.length; i += 7) {
+        const g = v.slice(i, i + 7);
+        let top = 0;
+        g.forEach((b, j) => { top |= (b >> 7) << j; });
+        o.push(top, ...g.map((b) => b & 0x7F));
+      }
+      return o;
+    }
+    function emit(m) { onSysex(Uint8Array.from(m)); }
+    function text(s, x, y, inv) {
+      tx.fillStyle = inv ? "#000" : "#fff";
+      tx.font = "bold 10px ui-monospace, Menlo, Consolas, monospace";
+      tx.textBaseline = "top";
+      tx.fillText(s, x, y);
+    }
+    function render() {
+      tx.fillStyle = "#000"; tx.fillRect(0, 0, 128, 64);
+      if (!running) {
+        tx.fillStyle = "#fff"; tx.fillRect(0, 0, 128, 11);
+        text("E16 LAUNCHER", 4, 1, true);
+        const top = Math.max(0, Math.min(items.length - 4, sel - 1));
+        for (let k = 0; k < 4; k++) {
+          const n = top + k, y = 14 + k * 12.5;
+          if (n === sel) { tx.fillStyle = "#fff"; tx.fillRect(2, y - 1, 118, 12); }
+          text(items[n], 6, y + 1, n === sel);
+        }
+        tx.fillStyle = "#fff";
+        tx.fillRect(124, 14 + (top / items.length) * 48, 2, 48 * 4 / items.length);
+      } else {
+        const img = tx.getImageData(0, 0, 128, 64);
+        for (let y = 12; y < 64; y++) for (let x = 0; x < 128; x++) {
+          const v = Math.sin(x / 9 + t / 8) + Math.sin(y / 7 - t / 11) + Math.sin((x + y) / 13 + t / 15);
+          const bayer = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]][y & 3][x & 3];
+          if ((v + 3) / 6 * 16 > bayer + .5) { const i = (y * 128 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; }
+        }
+        tx.putImageData(img, 0, 0);
+        tx.fillStyle = "#fff"; tx.fillRect(0, 0, 128, 11);
+        text(running.toUpperCase(), 4, 1, true);
+      }
+      const d = tx.getImageData(0, 0, 128, 64).data;
+      pix.fill(0);
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 128; x++) {
+        if (d[(y * 128 + x) * 4] > 110) pix[(y >> 3) * 128 + x] |= 1 << (y & 7);
+      }
+      for (let page = 0; page < 8; page++) for (let col = 0; col < 128; col += 32) {
+        emit([...SYSEX, OUT.OLED, page, col, ...pack7([...pix.subarray(page * 128 + col, page * 128 + col + 32)]), 0xF7]);
+      }
+      emit([...SYSEX, OUT.SYNC, t & 0x7F, 0xF7]);
+      for (let r = 0; r < 16; r++) {
+        const v = [];
+        for (let l = 0; l < 16; l++) {
+          let c = [0, 0, 0];
+          if (!running) {
+            if (r === 0 && l < Math.round((sel / (items.length - 1)) * 16)) c = [8, 20, 40];
+          } else {
+            /* a value arc per knob, in a colour per row, as a script draws them */
+            const fill = Math.round(8 + 7.5 * Math.sin(t / 9 + r * 1.3));
+            if (l < fill) c = hsv((r >> 2) * 70 + 190, 0.85, 55);
+            else if (r % 5 === 2 && l === 15 - (t >> 2) % 16) c = [70, 30, 0];
+          }
+          v.push(...c);
+        }
+        emit([...SYSEX, OUT.RING, r, ...pack7(v), 0xF7]);
+      }
+    }
+    function hsv(h, s, v) {
+      h %= 360;
+      const f = (n) => { const k = (n + h / 60) % 6; return Math.round(v - v * s * Math.max(0, Math.min(k, 4 - k, 1))); };
+      return [f(5), f(3), f(1)];
+    }
+    function state() {
+      const name = running || items[sel];
+      emit([...SYSEX, OUT.STATE, 1, running ? 1 : 0, 1, ..."1.2".split("").map((c) => c.charCodeAt(0)), 0,
+        ...name.split("").map((c) => c.charCodeAt(0)), 0xF7]);
+    }
+    function event(kind, i, v, remote) { emit([...SYSEX, OUT.EVENT, kind, i, v, remote ? 1 : 0, 0xF7]); }
+    /* What the page sends: virtual controls, as the E16 would take them. */
+    function receive(m) {
+      if (m[3] !== IN.CTL) return;
+      const ctl = m[4], act = m[5], n = m[6];
+      if (act === 2) {
+        event(0, ctl, n, true);
+        if (ctl === 0 && !running) { sel = Math.max(0, Math.min(items.length - 1, sel + n - 64)); state(); }
+      } else {
+        event(1, ctl, act, true);
+        if (ctl === SHIFT) shiftT = act ? performance.now() : 0;
+        if (ctl === 0 && act === 1 && !running) { running = items[sel]; state(); }
+      }
+    }
+    function start() {
+      setPill("demo", "Demo · no E16 needed");
+      notice(null);
+      if (STILL) {
+        /* one fixed scene, for screenshots: turns glowing on knobs 3 and 6,
+         * knob 10 and Shift held */
+        running = "Acid"; t = 40; state(); render();
+        event(0, 2, 63, false); event(1, 9, 1, false); event(0, 5, 66, true);
+        event(1, SHIFT, 1, false); event(1, SHIFT, 0, false); event(1, SHIFT, 1, true); event(0, 0, 65, true);
+        $("modeS").textContent = "launcher 1.2 · 30 fps";
+        return;
+      }
+      state();
+      setInterval(() => {
+        t++;
+        if (shiftT && running && performance.now() - shiftT > 1000) { running = null; shiftT = 0; state(); }
+        render();
+      }, 50);
+      /* someone at the device, now and then */
+      const script = [[0, 3, 1], [0, 5, -1], [1, 9, 0], [0, 12, 2], [1, 2, 0]];
+      let k = 0;
+      setInterval(() => {
+        const [kind, i, v] = script[k++ % script.length];
+        if (kind === 0) event(0, i, 64 + v, false);
+        else { event(1, i, 1, false); setTimeout(() => event(1, i, 0, false), 180); }
+      }, 1700);
+    }
+    return { start, receive };
+  })();
+
+  start();
+})();
+</script>
+</body>
+</html>

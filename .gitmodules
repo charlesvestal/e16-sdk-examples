@@ -1,0 +1,12 @@
+[submodule "external/E16-SDK"]
+	path = external/E16-SDK
+	url = https://github.com/OXI-Instruments/E16-SDK.git
+[submodule "external/lua"]
+	path = external/lua
+	url = https://github.com/lua/lua.git
+[submodule "external/tlsf"]
+	path = external/tlsf
+	url = https://github.com/mattconte/tlsf.git
+[submodule "external/oxi-e16-lua"]
+	path = external/oxi-e16-lua
+	url = https://github.com/charlesvestal/oxi-e16-lua.git

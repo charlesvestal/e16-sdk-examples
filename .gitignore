@@ -1,0 +1,8 @@
+build/
+build-host/
+build-host-double/
+build-nodev/
+build-apps/
+.DS_Store
+.cache/
+build-player/
