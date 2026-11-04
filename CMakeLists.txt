@@ -186,6 +186,11 @@ if(E16_HOST)
     target_include_directories(app_boot_test PRIVATE src/apps)
     target_compile_options(app_boot_test PRIVATE -Wall -Wextra -Wconversion -Wsign-conversion)
 
+    # The leave prompt (Shift held alone 5 s, then encoder 1).
+    add_executable(exit_prompt_test test/ui/exit_prompt_test.c src/ui/exit_prompt.c src/ui/font.c)
+    target_include_directories(exit_prompt_test PRIVATE src/ui)
+    target_compile_options(exit_prompt_test PRIVATE -Wall -Wextra)
+
     # The drone app's DSP (apps/drone/core: portable C, no api calls, no
     # libm): bounds and NaN fuzz, pitch, timing; --wav writes the demo.
     add_executable(drone_test test/drone/drone_test.c apps/drone/core/drone.c apps/drone/core/drone_save.c)
@@ -221,7 +226,7 @@ else()
         src/rt/canvas.c)
     set(PORT_SOURCES src/port_e16.c src/port_e16_palette.c src/port_e16_canvas.c src/port_e16_audio.c
         src/port_e16_usbaudio.c)
-    set(UI_SOURCES src/main.c src/console.c src/persist.c src/scenes.c src/ui/font.c src/ui/screen.c
+    set(UI_SOURCES src/main.c src/console.c src/persist.c src/scenes.c src/ui/font.c src/ui/screen.c src/ui/exit_prompt.c
         src/ui/launcher.c src/noise_lab.c src/webcam/webcam.c src/webcam/wc_ring.c
         src/mirror/mirror.c src/mirror/mirror_core.c)
     # Webcam mode's video synth: line() runs in the USB service interrupt,

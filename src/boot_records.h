@@ -45,7 +45,7 @@ typedef enum {
 typedef enum {
     APP_END_NONE = 0,
     APP_END_EXIT,     /* api->exit() or app_main() returned (code) */
-    APP_END_SHIFT,    /* Shift held 1 s */
+    APP_END_SHIFT,    /* left from the prompt: Shift alone 5 s, then encoder 1 (was Shift held 1 s; the name stays) */
     APP_END_FAULT,    /* a fault handler (main.c) */
     APP_END_STACK,    /* the stack canary was hit */
     APP_END_CONSOLE,  /* the dev console's reset */

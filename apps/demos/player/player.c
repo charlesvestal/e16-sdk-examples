@@ -13,7 +13,7 @@
  *   encoder 2   speed, 25% - 400% (turn)
  *   encoder 3   LED brightness, 0 (off) - 8 (turn)
  *   encoder 4   pause / resume (press)
- *   Shift held 1 s: back to the launcher (the launcher's own watch)
+ *   Shift held alone 5 s, then push 1: back to the launcher (its leave prompt)
  *
  * A change shows a one-line note at the bottom of the screen for about a
  * second. Every 5 s it logs "player: <file> N frames, X fps" (frames
@@ -374,13 +374,13 @@ static int clamp(int v, int lo, int hi)
 
 int app_main(const e16_api_t *api)
 {
-    api->log("player: enc 1 file, 2 speed, 3 LEDs, 4 press pause; hold Shift to leave");
+    api->log("player: enc 1 file, 2 speed, 3 LEDs, 4 press pause; hold Shift 5 s to leave");
     load_playlist(api);
     if (n_files == 0 || !open_from(api, 0, 1)) {
         api->log("player: no playable files (" PLAYLIST ")");
         no_files_screen(api);
         for (;;)
-            api->delay_ms(50); /* Shift held 1 s leaves */
+            api->delay_ms(50); /* the leave prompt leaves */
     }
 
     unsigned now = api->millis();

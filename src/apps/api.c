@@ -5,7 +5,7 @@
  * the console's virtual controls) runs between ENTER() and LEAVE(), so
  * app_mode.c's PendSV service never runs in the middle of one; slow calls
  * (present, delay, midi_read) run that service themselves. An exit asked
- * for from the SysTick (Shift held) while the app is in here happens on
+ * for from the SysTick (the leave prompt) while the app is in here happens on
  * LEAVE().
  *
  * Errors are negative, e16_api.h's E16_E*.
@@ -32,6 +32,7 @@
 
 #include "app_files.h"
 #include "app_mode.h"
+#include "exit_prompt.h"
 #include "console.h"
 #include "e16_app_format.h"
 #include "ff.h"
@@ -65,6 +66,7 @@ typedef struct {
 
 typedef struct {
     uint8_t fb[E16_FB_SIZE];
+    uint32_t present_ms;           /* when the app last presented a frame */
     uint8_t shown[E16_FB_SIZE];    /* fb as last presented: the screen dump's and the mirror's */
     FIL files[APP_FILES_MAX];
     bool open[APP_FILES_MAX];
@@ -111,6 +113,23 @@ const uint8_t *app_api_framebuffer(void)
     return R ? R->shown : NULL;
 }
 
+uint32_t app_api_last_present(void)
+{
+    return R ? R->present_ms : 0;
+}
+
+void app_api_redraw(void)
+{
+    if (!R) {
+        return;
+    }
+    memcpy(R->shown, R->fb, sizeof R->shown);
+    app_mode_draw_overlay(R->shown);
+    for (int page = 0; page < DISPLAY_PAGES; page++) {
+        display_write(page, 0, R->shown + page * DISPLAY_WIDTH, DISPLAY_WIDTH);
+    }
+}
+
 /* ---- display ---- */
 
 static uint8_t *api_display_fb(void)
@@ -124,6 +143,8 @@ static void api_display_present(void)
     /* A copy first: the app may draw into fb again at any time, and the
      * screen dump and the mirror read what the OLED has. */
     memcpy(R->shown, R->fb, sizeof R->shown);
+    app_mode_draw_overlay(R->shown);
+    R->present_ms = system_millis();
     for (int page = 0; page < DISPLAY_PAGES; page++) {
         display_write(page, 0, R->shown + page * DISPLAY_WIDTH, DISPLAY_WIDTH);
     }
@@ -169,6 +190,12 @@ static int api_enc_read(int index)
     int hw = enc_read(index);
     mirror_turn(index, hw, false); /* the console reports virtual turns itself */
     int steps = hw + console_virtual_take_steps(index);
+    if (steps != 0) {
+        app_mode_turned();
+    }
+    if (app_mode_input_blocked()) {
+        steps = 0; /* the leave prompt is up: turns are dropped, not saved up */
+    }
     LEAVE();
     return steps;
 }
@@ -179,7 +206,7 @@ static int api_enc_pressed(int index)
         return 0;
     }
     ENTER();
-    bool down = enc_pressed(index) || console_virtual_down(index);
+    bool down = (enc_pressed(index) || console_virtual_down(index)) && !app_mode_input_blocked();
     LEAVE();
     return down ? 1 : 0;
 }
@@ -187,7 +214,7 @@ static int api_enc_pressed(int index)
 static int api_shift_pressed(void)
 {
     ENTER();
-    bool down = enc_shift_pressed() || console_virtual_down(16);
+    bool down = (enc_shift_pressed() || console_virtual_down(16)) && !app_mode_input_blocked();
     LEAVE();
     return down ? 1 : 0;
 }
@@ -477,6 +504,11 @@ __attribute__((noreturn)) static void api_exit(int code)
     app_mode_end(APP_END_EXIT, code);
 }
 
+static int api_exit_pending(void)
+{
+    return app_mode_exit_pending() ? 1 : 0;
+}
+
 static const e16_api_t g_api = {
     .abi_version = E16_API_VERSION,
     .size = sizeof(e16_api_t),
@@ -503,6 +535,7 @@ static const e16_api_t g_api = {
     .audio_start = api_audio_start,
     .audio_stop = api_audio_stop,
     .audio_info = api_audio_info,
+    .exit_pending = api_exit_pending,
 };
 
 const e16_api_t *app_api_init(void *ram, const char *name, uint32_t r9)

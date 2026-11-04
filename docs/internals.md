@@ -50,8 +50,8 @@ there.
 script's saved vars and store, then `rt_load()` (built-in) or
 `rt_load_reader()` (a disk script, streamed through FatFs so the source
 is never held whole in RAM) runs the script's top level and
-`page.onInit()`. A load error shows the error screen. Holding Shift 1 s
-unloads the script (saving vars and store) and returns to the menu.
+`page.onInit()`. A load error shows the error screen. Leaving (Shift
+held 5 s, then encoder 1) unloads the script (saving vars and store) and returns to the menu.
 
 **Menu → native app**: selecting an `.e16app` entry checks the image,
 then unloads Lua (saving state), writes a reset-surviving record, and

@@ -7,7 +7,7 @@ launcher loads straight into RAM and runs — no Lua, no interpreter.
 Selecting one in the menu unloads Lua (saving the current script's state),
 resets into a clean boot that brings up only the drivers and the disk, and
 jumps into the app. Every way out — returning from `app_main()`,
-`api->exit()`, holding Shift 1 s, a fault, or a smashed stack canary —
+`api->exit()`, the leave prompt (Shift held alone 5 s, then encoder 1), a fault, or a smashed stack canary —
 resets back into the normal launcher, which logs why.
 
 **Format and ABI**: an `.e16app` (`src/apps/e16_app_format.h`) is a 76-byte

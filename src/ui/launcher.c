@@ -18,6 +18,7 @@
 #include "persist.h"
 #include "disk_mode.h"
 #include "launcher.h"
+#include "exit_prompt.h"
 #include "app_mode.h"
 #include "webcam.h"
 #include "mirror.h"
@@ -33,29 +34,31 @@
  *             mode" (if the volume is available), enters Disk mode.
  *   Disk mode the computer has the volume as a USB drive (disk_mode.h).
  *             Ejecting it on the computer, pressing encoder 1, or
- *             holding Shift 1 s leaves, back to the menu.
+ *             leaving (below) gets back to the menu.
  *   Webcam    the E16 is a USB camera with a video synth on the encoders
  *             (webcam.h), the menu's last entry. Holding encoder 1 for
- *             1 s, or Shift 1 s, leaves, back to the menu; a short press
+ *             1 s, or leaving (below), gets back to the menu; a short press
  *             of encoder 1 is the webcam's (the OLED's view).
  *   Running   encoders go to the script, except:
  *               Shift + press encoder N (while Shift is held down) = show
  *                 page N directly (if the script has one), logged as
- *                 "ui: page N (<name>) via shift+press". Pressing any
- *                 encoder while Shift is down also cancels that Shift
- *                 hold's "1 s = back to menu" timer (see g_shift_used
- *                 below), so Shift+press never also exits to the menu,
- *                 and the Shift release that follows doesn't count as a
- *                 tap either (no picker opens from it).
+ *                 "ui: page N (<name>) via shift+press". The Shift
+ *                 release that follows doesn't count as a tap (no picker
+ *                 opens from it; see g_shift_used below).
  *               tap Shift (release within 1 s, no encoder pressed during
  *                 the hold), then press encoder N = show page N
  *                 (page.onPageChange); the grid shows the page names
  *                 until then. Another Shift tap, or 4 s without a
  *                 choice, closes it.
- *               hold Shift 1 s with no encoder pressed = back to the menu
- *                 (rt_unload: store saved).
- *   Error     press any encoder (or hold Shift 1 s) = back to the menu.
- *   Anywhere  Shift + hold encoder 16 for 2 s = bootloader (a quick
+ *               leaving (below) = back to the menu (rt_unload: store
+ *                 saved).
+ *   Error     press any encoder (or leaving, below) = back to the menu.
+ *   Leaving   hold Shift on its own (no encoder pushed or turned) for
+ *             5 s: a prompt over the screen; push encoder 1 to leave, let
+ *             go of Shift (or wait 4 s) to stay. Input belongs to the
+ *             prompt while it's up (exit_prompt.h). The same leaves a
+ *             native app, Disk mode and Webcam mode.
+ *   Anywhere  Shift + hold encoder 16 (alone) for 2 s = bootloader (a quick
  *               Shift + press of 16 instead just tries to switch to page
  *               16 like any other encoder, which no script has a page for
  *               -- see on_press() -- so it's effectively ignored).
@@ -69,7 +72,7 @@
  */
 typedef enum { UI_MENU, UI_RUNNING, UI_ERROR, UI_DISK, UI_WEBCAM } ui_state_t;
 
-#define SHIFT_HOLD_MS 1000u
+#define SHIFT_TAP_MAX_MS 1000u /* a Shift release later than this isn't a tap */
 #define WEBCAM_HOLD_MS 1000u   /* encoder 1 held this long leaves webcam mode */
 #define BOOT_HOLD_MS 2000u
 #define PICKER_TIMEOUT_MS 4000u
@@ -85,6 +88,9 @@ static bool g_shift;
 static bool g_shift_used;            /* an encoder was pressed during this Shift */
 static bool g_shift_long;            /* this Shift hold already acted */
 static uint32_t g_shift_t0;
+static exit_prompt_t g_prompt;       /* Shift alone 5 s, then encoder 1 = leave (exit_prompt.h) */
+static uint32_t g_prompt_last;
+static bool g_turned;                /* an encoder was turned this pass */
 static bool g_picker;
 static uint32_t g_picker_t0;
 static bool g_boot_armed;
@@ -194,16 +200,27 @@ static void persist_save_on_exit(const char *name)
     persist_save_shared();
 }
 
+/* What the leave prompt names. */
+static const char *prompt_name(void)
+{
+    switch (g_state) {
+        case UI_RUNNING: return g_scene ? g_scene->title : NULL;
+        case UI_DISK: return "Disk mode";
+        case UI_WEBCAM: return "Webcam";
+        default: return NULL;
+    }
+}
+
 static void show_menu(void)
 {
     if (g_state == UI_RUNNING) {
         persist_save_on_exit(g_scene->name);
         log_printf("ui: unloaded %s", g_scene->name);
     } else if (g_state == UI_DISK) {
-        disk_mode_leave("shift hold");
+        disk_mode_leave("leave prompt");
         g_sel = scenes_count(); /* still on "Disk mode", wherever the rescan put it */
     } else if (g_state == UI_WEBCAM) {
-        webcam_leave("shift hold");
+        webcam_leave("leave prompt");
         g_sel = menu_count() - 1;
     }
     g_scene = NULL;
@@ -375,6 +392,10 @@ static void show_page(int enc, const char *how)
 
 static void on_turn(int enc, int steps)
 {
+    g_turned = true;
+    if (exit_prompt_active(&g_prompt)) {
+        return;
+    }
     /* Turns are dropped while Shift is held -- there's no Shift+turn
      * gesture yet (every Shift gesture so far is press-based: a tap or
      * hold of Shift itself, or Shift + press of an encoder). */
@@ -400,17 +421,27 @@ static void on_turn(int enc, int steps)
 static void on_press(int enc, uint32_t now)
 {
     g_consumed[enc] = true;
+    if (exit_prompt_active(&g_prompt)) {
+        return; /* the leave prompt's (encoder 1 is read by poll_shift()) */
+    }
     if (g_shift) {
-        /* Setting g_shift_used here is what cancels this Shift hold's
-         * "1 s = back to menu" timer (poll_shift() only fires that while
-         * !g_shift_used) and makes the Shift release that follows not
-         * count as a tap (poll_shift() only opens the picker on release
-         * while !g_shift_used), for every encoder, not just this
-         * direct-page-switch one. */
+        /* Setting g_shift_used here makes the Shift release that
+         * follows not count as a tap (poll_shift() only opens the picker
+         * on release while !g_shift_used), for every encoder. */
         g_shift_used = true;
-        if (enc == 15) {
+        /* the bootloader gesture is Shift + 16 alone: 16 with any other
+         * encoder doesn't arm it (nor 16 held into the launcher after an
+         * app), and a press of
+         * another one while it's armed disarms it */
+        bool others = false;
+        for (int i = 0; i < 15; i++) {
+            others = others || enc_pressed(i) || console_virtual_down(i);
+        }
+        if (enc == 15 && !others) {
             g_boot_armed = true;
             g_boot_t0 = now;
+        } else {
+            g_boot_armed = false;
         }
         if (g_state == UI_RUNNING) {
             if (g_picker) {
@@ -525,19 +556,49 @@ static void poll_shift(uint32_t now)
         g_shift_t0 = now;
         g_shift_used = false;
         g_shift_long = false;
-    } else if (shift && !g_shift_used && !g_shift_long && now - g_shift_t0 >= SHIFT_HOLD_MS) {
-        g_shift_long = true;
-        if (g_state != UI_MENU) {
-            show_menu();
-        }
     } else if (!shift && g_shift) {
         g_boot_armed = false;
-        if (!g_shift_used && !g_shift_long && g_state == UI_RUNNING) {
+        if (!g_shift_used && !g_shift_long && now - g_shift_t0 < SHIFT_TAP_MAX_MS &&
+            g_state == UI_RUNNING) {
             set_picker(!g_picker, now);
             log_printf("ui: page picker %s", g_picker ? "open" : "closed");
         }
     }
     g_shift = shift;
+
+    /* the leave prompt: Shift alone 5 s, then encoder 1 (not on the menu,
+     * where there's nothing to leave) */
+    uint32_t pressed = 0;
+    for (int i = 0; i < ENC_COUNT; i++) {
+        if (enc_pressed(i) || console_virtual_down(i)) {
+            pressed |= 1u << i;
+        }
+    }
+    if (g_state == UI_MENU && g_prompt.state != EXIT_PROMPT_CONFIRMED) {
+        exit_prompt_reset(&g_prompt);
+    } else {
+        int r = exit_prompt_step(&g_prompt, now - g_prompt_last, shift, pressed, g_turned);
+        if (r == EXIT_PROMPT_SHOW) {
+            g_shift_long = true; /* (its release isn't a tap) */
+            g_boot_armed = false;
+            log_printf("ui: leave prompt");
+            screen_prompt(true, prompt_name());
+        } else if (r == EXIT_PROMPT_HIDE) {
+            log_printf("ui: leave prompt cancelled");
+            screen_prompt(false, NULL);
+        } else if (r == EXIT_PROMPT_LEAVE) {
+            log_printf("ui: leaving from the prompt");
+            screen_prompt(false, NULL);
+            show_menu();
+        }
+        /* confirmed: input stays the launcher's until every button is up,
+         * so the confirming push doesn't also start a menu entry */
+        if (g_prompt.state == EXIT_PROMPT_CONFIRMED && !shift && !pressed) {
+            exit_prompt_reset(&g_prompt);
+        }
+    }
+    g_prompt_last = now;
+    g_turned = false;
 
     if (g_boot_armed && now - g_boot_t0 >= BOOT_HOLD_MS) {
         launcher_reboot_to_bootloader("Shift + 16");

@@ -36,7 +36,7 @@
  *      mem_layout.h) and jumps to it with r9 = its GOT and r0 = the api
  *      table (src/apps/api.c), on a fresh stack at the top of SRAM.
  *   3. Every way out resets back into the launcher, noting why in the
- *      record: api->exit() or returning from app_main(); Shift held 1 s
+ *      record: api->exit() or returning from app_main(); leaving from the prompt (Shift held alone 5 s, then encoder 1; exit_prompt.h)
  *      (watched from the SysTick, so it works whatever the app does); a
  *      fault (main.c's handlers); a smashed stack canary. The next normal
  *      boot logs it (app_mode_boot_report()); an image that didn't load
@@ -103,8 +103,18 @@ void app_mode_end(app_end_t reason, int code) __attribute__((noreturn));
  * canary. Never runs concurrently with itself or with an api call. */
 void app_mode_service(void);
 
-/* An exit asked for from an interrupt (Shift held) while the app was
- * inside an api call: the api calls this on the way out. */
+/* An exit asked for from an interrupt (the leave prompt, exit_prompt.h)
+ * while the app was inside an api call: the api calls this on the way out. */
 void app_mode_check_exit(void);
+
+/* The leave prompt (exit_prompt.h) is up: the api passes the app no
+ * input (enc_read / enc_pressed / shift_pressed read nothing). */
+bool app_mode_input_blocked(void);
+/* Draw the prompt over fb if it's up (the api, over each frame). */
+void app_mode_draw_overlay(uint8_t *fb);
+/* The app read a turn (cancels a Shift hold's prompt). */
+void app_mode_turned(void);
+/* The prompt was confirmed: the app should save and api->exit(). */
+bool app_mode_exit_pending(void);
 
 #endif

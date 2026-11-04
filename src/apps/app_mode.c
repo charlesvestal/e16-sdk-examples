@@ -35,8 +35,8 @@
 #include "stack_guard.h"
 #include "usb_functions.h"
 #include "volume.h"
+#include "exit_prompt.h"
 
-#define SHIFT_EXIT_MS 1000u
 /* An exit asked for from the SysTick is carried out by the api (on the
  * way out of the call the app is in) or by PendSV (if it's in none). If
  * neither has happened by then -- the app raised BASEPRI above PendSV, or
@@ -58,7 +58,13 @@ static volatile bool g_watch;          /* the SysTick watches Shift, pends the s
 static volatile uint32_t g_exit_req;   /* app_end_t asked for from an interrupt */
 static volatile int32_t g_exit_code;
 static uint32_t g_exit_wait_ms;
-static uint32_t g_shift_ms;
+#define RELEASE_WAIT_MS 10000u  /* the longest a reset waits for the buttons */
+#define LEAVE_GRACE_MS 1500u    /* after the prompt's yes: the app's time to save and exit */
+static exit_prompt_t g_prompt;        /* Shift alone 5 s, then encoder 1 (exit_prompt.h) */
+static volatile bool g_turned;        /* the app read a turn since the SysTick last looked */
+static volatile bool g_redraw;        /* the prompt appeared / went: draw it (or the app) now */
+static volatile bool g_exit_pending;  /* the prompt was confirmed: api->exit_pending() */
+static uint32_t g_leave_ms;           /* ms since then */
 static uint32_t g_service_ms;
 static uint32_t g_t_start;
 static char g_name[E16APP_NAME_MAX];
@@ -121,7 +127,7 @@ static const char *end_text(uint32_t reason)
 {
     switch (reason) {
         case APP_END_EXIT: return "exit";
-        case APP_END_SHIFT: return "Shift held";
+        case APP_END_SHIFT: return "left from the prompt";
         case APP_END_FAULT: return "fault";
         case APP_END_STACK: return "stack overflow";
         case APP_END_CONSOLE: return "console";
@@ -635,6 +641,38 @@ void app_mode_service(void)
     if (!stack_guard_intact()) {
         app_mode_end(APP_END_STACK, 0);
     }
+    /* the leave prompt over the app: when it appears or goes, and every
+     * 250 ms while it's up if the app isn't presenting frames itself */
+    static uint32_t last_draw;
+    uint32_t now = system_millis();
+    if (g_redraw || (exit_prompt_active(&g_prompt) && now - app_api_last_present() >= 250u &&
+                     now - last_draw >= 250u)) {
+        g_redraw = false;
+        last_draw = now;
+        app_api_redraw();
+    }
+}
+
+bool app_mode_input_blocked(void)
+{
+    return exit_prompt_active(&g_prompt);
+}
+
+void app_mode_draw_overlay(uint8_t *fb)
+{
+    if (exit_prompt_active(&g_prompt)) {
+        exit_prompt_draw(fb, g_name, g_prompt.state == EXIT_PROMPT_CONFIRMED);
+    }
+}
+
+void app_mode_turned(void)
+{
+    g_turned = true;
+}
+
+bool app_mode_exit_pending(void)
+{
+    return g_exit_pending;
 }
 
 void app_mode_check_exit(void)
@@ -643,6 +681,8 @@ void app_mode_check_exit(void)
         app_mode_end((app_end_t)g_exit_req, g_exit_code);
     }
 }
+
+static void reset_when_released(void) __attribute__((noreturn));
 
 void app_mode_end(app_end_t reason, int code)
 {
@@ -663,6 +703,50 @@ void app_mode_end(app_end_t reason, int code)
     leds_clear();
     leds_show();
     drain_log(LOG_DRAIN_MS, true);
+    reset_when_released();
+}
+
+/* Shift or an encoder physically down (the bootloader can't see the
+ * console's virtual presses). */
+static bool buttons_down(void)
+{
+    for (int i = 0; i < ENC_COUNT; i++) {
+        if (enc_pressed(i)) {
+            return true;
+        }
+    }
+    return enc_shift_pressed();
+}
+
+/* Reset once every button is up, at most
+ * RELEASE_WAIT_MS later, saying so on the OLED meanwhile: reset with
+ * 15 + 16 + Shift held and OXI's bootloader starts its update mode. */
+static void reset_when_released(void)
+{
+    if (buttons_down()) {
+        /* drawn into the api's "as presented" buffer: the app is over, and
+         * the screen dump then shows it too */
+        uint8_t *fb = (uint8_t *)app_api_framebuffer();
+        if (fb) {
+            exit_prompt_draw_release(fb);
+            for (int p = 0; p < DISPLAY_PAGES; p++) {
+                display_write(p, 0, fb + p * DISPLAY_WIDTH, DISPLAY_WIDTH);
+            }
+        }
+        uint32_t t0 = system_millis();
+        uint32_t up_since = 0;
+        bool up = false;
+        while (system_millis() - t0 < RELEASE_WAIT_MS) {
+            if (buttons_down()) {
+                up = false;
+            } else if (!up) {
+                up = true;
+                up_since = system_millis();
+            } else if (system_millis() - up_since >= 50u) {
+                break; /* released for 50 ms: no bounce */
+            }
+        }
+    }
     NVIC_SystemReset();
 }
 
@@ -688,12 +772,26 @@ void HAL_IncTick(void)
     if (!g_watch) {
         return;
     }
-    if (enc_shift_pressed() || console_virtual_held(16)) {
-        if (++g_shift_ms >= SHIFT_EXIT_MS) {
-            request_exit(APP_END_SHIFT, 0);
+    bool shift = enc_shift_pressed() || console_virtual_held(16);
+    uint32_t pressed = 0;
+    for (int i = 0; i < ENC_COUNT; i++) {
+        if (enc_pressed(i) || console_virtual_held(i)) {
+            pressed |= 1u << i;
         }
-    } else {
-        g_shift_ms = 0;
+    }
+    bool turned = g_turned;
+    g_turned = false;
+    int r = exit_prompt_step(&g_prompt, 1, shift, pressed, turned);
+    if (r == EXIT_PROMPT_SHOW || r == EXIT_PROMPT_HIDE) {
+        g_redraw = true;
+    } else if (r == EXIT_PROMPT_LEAVE) {
+        g_redraw = true;
+        g_exit_pending = true;
+        g_leave_ms = 0;
+    }
+    /* the app had its chance to save and api->exit(): leave anyway */
+    if (g_exit_pending && ++g_leave_ms >= LEAVE_GRACE_MS) {
+        request_exit(APP_END_SHIFT, 0);
     }
     /* An audio callback that doesn't return holds up everything below
      * it (the app, PendSV, the api): reset right away, whatever else is
@@ -704,7 +802,10 @@ void HAL_IncTick(void)
         NVIC_SystemReset();
     }
     if (g_exit_req != APP_END_NONE) {
-        if (++g_exit_wait_ms >= EXIT_FORCE_MS && !app_api_flash_busy()) {
+        /* (forced: every button up first, see reset_when_released(),
+         * but not waiting forever on them) */
+        if (++g_exit_wait_ms >= EXIT_FORCE_MS && !app_api_flash_busy() &&
+            (!buttons_down() || g_exit_wait_ms >= EXIT_FORCE_MS + RELEASE_WAIT_MS)) {
             record_end((app_end_t)g_exit_req, g_exit_code);
             NVIC_SystemReset();
         }

@@ -11,7 +11,8 @@
  *   Shift + push 1-8: select a track (BD SD LT CP CH OH CB 303); again: its sound page
  *   Shift + push 9 sound, 10 global, 11 patterns, 12 mute / levels,
  *               13 new 303 line, 14 mutate it, 16 play / stop
- *   Shift held 1 s: back to the launcher (the state is saved on the way)
+ *   Shift held alone 5 s, then push 1: back to the launcher (the launcher's
+ *     leave prompt; the state is saved on the way)
  *
  * MIDI in (USB and TRS): clock, start, continue and stop drive the sequencer (if "clock in"
  * is on); a note transposes the 303 (C4 = none). MIDI out (USB and TRS 1): clock and
@@ -643,6 +644,13 @@ static void try_save(const char *why)
     api->log(s);
 }
 
+/* The user confirmed the launcher's leave prompt: save, then exit (the
+ * launcher ends the app 1.5 s later either way). */
+static int leaving(void)
+{
+    return E16_API_HAS(api, exit_pending) && api->exit_pending();
+}
+
 static void save_poll(uint32_t shift_held_ms)
 {
     switch (x0x_save_poll(&g_save, now_ms, shift_held_ms)) {
@@ -1109,7 +1117,7 @@ static void fail_screen(const char *a, const char *b)
     gfx_clear();
     gfx_text(0, 16, a, 0);
     gfx_text(0, 28, b, 0);
-    gfx_text(0, 48, "Hold Shift to leave", 0);
+    gfx_text(0, 48, "Hold Shift 5 s to leave", 0);
     api->display_present();
     for (;;)
         api->delay_ms(100);
@@ -1163,14 +1171,10 @@ int app_main(const e16_api_t *a)
     }
     say(loaded ? "x0x - restored" : "x0x - factory loop", 0);
 
-    uint32_t frame_ms = 0, led_ms = 0, info_ms = 0, log_ms = now_ms, shift_t0 = 0, mutated_seen = 0;
-    int shift_was = 0;
+    uint32_t frame_ms = 0, led_ms = 0, info_ms = 0, log_ms = now_ms, mutated_seen = 0;
     for (;;) {
         now_ms = api->millis();
         int shift = api->shift_pressed();
-        if (shift && !shift_was)
-            shift_t0 = now_ms;
-        shift_was = shift;
 
         midi_in();
         controls(shift);
@@ -1185,7 +1189,11 @@ int app_main(const e16_api_t *a)
             audition_on = 0;
         }
         /* (+1: a Shift down this very millisecond still counts as held) */
-        save_poll(shift ? now_ms - shift_t0 + 1u : 0u);
+        /* Leaving: the save core's "on the way out" attempt, then exit. */
+        int bye = leaving();
+        save_poll(bye ? X0X_SAVE_SHIFT_MS : 0u);
+        if (bye)
+            api->exit(0);
 
         if (now_ms - info_ms >= 500u) {
             info_ms = now_ms;

@@ -10,7 +10,7 @@
  *     worked, every DRONE_SAVE_RETRY_MS after one that didn't (E16_EBUSY:
  *     the erase budget; or an error), counted from the attempt either way,
  *   - and once per Shift press, after it's been held
- *     DRONE_SAVE_SHIFT_MS (the launcher leaves at 1 s), whatever the
+ *     DRONE_SAVE_SHIFT_MS (the app passes it when the user confirmed the launcher's leave prompt), whatever the
  *     interval: one attempt, not one per loop pass.
  * Only while there's a change not yet saved.
  */

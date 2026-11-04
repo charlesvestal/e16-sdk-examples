@@ -18,14 +18,13 @@ closed hats and a new TB-3PO line).
 Install: copy `build-apps/x0x.e16app` to `/apps/` in Disk mode, eject,
 start "x0x" from the menu. It plays the factory loop at once (808 kick on
 the beat, clap on 2 and 4, open hats on the off-beats, a TB-3PO acid
-line). **Shift + push 16** stops and starts it. Holding Shift 1 s goes
-back to the launcher.
+line). **Shift + push 16** stops and starts it. Hold Shift on its own for 5 s and
+push encoder 1 at the prompt to go back to the launcher.
 
 ## Controls
 
 The 16 encoders are the 16 steps of the selected track, or a page's 16
-controls. Shift + push picks the track or page. Shift combinations must
-be quick: holding Shift 1 s leaves the app (the launcher's rule).
+controls. Shift + push picks the track or page.
 
 **Everywhere**
 
@@ -39,7 +38,7 @@ be quick: holding Shift 1 s leaves the app (the launcher's rule).
 | Shift + push 13 | a new TB-3PO line for the 303 (new seed) |
 | Shift + push 14 | mutate the 303 line (re-rolls about a quarter of it) |
 | Shift + push 16 | play / stop |
-| Shift held 1 s | back to the launcher (the state is saved on the way) |
+| Shift held alone 5 s, then encoder 1 | back to the launcher (the leave prompt; the state is saved on the way) |
 
 **Step page, drum track** (encoder N = step N)
 

@@ -29,7 +29,7 @@ says where the files go.
 | encoder 2 (turn) | speed, 25%–400% |
 | encoder 3 (turn) | LED brightness, off–8 (default 3) |
 | encoder 4 (press) | pause / resume |
-| Shift held 1 s | back to the launcher |
+| Shift held alone 5 s, then encoder 1 | back to the launcher (the leave prompt) |
 
 The player logs `player: <file> N frames, X fps` every 5 s. The rings are
 laid out as a 4×4 grid over the picture, and each ring shows the colours

@@ -16,7 +16,7 @@ plus the canvas/rings/acid/midimon demos, each with a `--@scene` header) and
 header format on the device itself.
 
 Leave disk mode by ejecting the volume on the computer, pressing encoder 1,
-or holding Shift 1 s. Leaving flushes the block cache, remounts the
+or leaving from the prompt (Shift held 5 s, then encoder 1). Leaving flushes the block cache, remounts the
 firmware's own view of the volume, and rescans `/scripts` and `/apps` for
 the menu. Outside disk mode the volume isn't presented at all — the Mac
 shows nothing to mount.
@@ -44,7 +44,7 @@ ffmpeg -f avfoundation -framerate 20 -video_size 160x120 -pixel_format yuyv422 \
     -i "E16 Launcher" -t 10 out.mp4
 ```
 
-Leave by holding encoder 1 for 1 s, or Shift for 1 s: the E16 re-enumerates
+Leave by holding encoder 1 for 1 s, or from the leave prompt (Shift held 5 s, then encoder 1): the E16 re-enumerates
 back to MIDI + Disk mode's mass storage + USB audio, on the menu. While the
 camera is on there's no mass storage and no USB audio input (the GD32's USB
 core has the packet memory for MIDI + video or for the rest, not both); the

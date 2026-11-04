@@ -164,8 +164,19 @@ if (E16_API_HAS(api, audio_start))
   resets into a clean boot that brings up only the drivers and the disk,
   loads the app's code into SRAM and its data into CCM, and jumps to
   `app_main`.
-- Leaving — `api->exit()`, returning from `app_main`, holding Shift for
-  1 s, or a fault — always resets back into the normal launcher menu.
+- Leaving — `api->exit()`, returning from `app_main`, the launcher's leave
+  prompt, or a fault — always resets back into the normal launcher menu.
+  The prompt: hold Shift on its own (no encoder pushed or turned) for 5 s;
+  the launcher draws "Leave <app>?" over the app's frames (or over its last
+  frame, if it has stopped presenting) and the app reads no input while
+  it's up; encoder 1 confirms, letting go of Shift cancels. It's watched
+  from the SysTick, so it works even if the app hangs. After the
+  confirmation `api->exit_pending()` returns 1 (check
+  `E16_API_HAS(api, exit_pending)`): save what's worth keeping and call
+  `api->exit()`; the launcher ends the app 1.5 s later either way. The
+  reset back to the launcher waits until every button is up, because
+  OXI's bootloader starts its update mode if it sees encoders 15 + 16 and
+  Shift held at power-up.
 
 ## Limits
 

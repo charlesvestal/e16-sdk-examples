@@ -12,7 +12,11 @@ default; a release build turns it off and ignores these):
   console.py press N         press and release encoder N (1-16)
   console.py down N | up N   press / release encoder N (N = shift for Shift)
   console.py shift-tap       tap Shift (opens the page picker)
-  console.py shift-hold [S]  hold Shift S seconds (default 1.3: back to menu)
+  console.py shift-hold [S]  hold Shift S seconds (default 1.3; 5 s or more
+                             brings up the leave prompt)
+  console.py leave           leave: hold Shift 5.3 s, push encoder 1 at the
+                             prompt (back to the menu from a script, app,
+                             Disk or Webcam mode)
   console.py pwm             sample TRS 2's PWM duty 50 times over 100 ms
                              (the synth's activity check); prints the
                              "console: pwm ..." log line it answers with
@@ -247,8 +251,23 @@ def main():
             control(out, 16, 1)
             control(out, 16, 0)
         elif cmd == "shift-hold":
+            # a virtual press auto-releases after 3 s: press again every 1 s
+            end = time.time() + (float(a[1]) if len(a) > 1 else 1.3)
+            while time.time() < end:
+                control(out, 16, 1)
+                time.sleep(min(1.0, max(0.0, end - time.time())))
+            control(out, 16, 0)
+        elif cmd == "leave":
+            # hold Shift alone 5.3 s (re-pressed: a virtual press lasts
+            # 3 s), then push encoder 1 at the prompt, then let go
+            end = time.time() + 5.3
+            while time.time() < end:
+                control(out, 16, 1)
+                time.sleep(min(1.0, max(0.0, end - time.time())))
             control(out, 16, 1)
-            time.sleep(float(a[1]) if len(a) > 1 else 1.3)
+            control(out, 0, 1)
+            time.sleep(0.1)
+            control(out, 0, 0)
             control(out, 16, 0)
         elif cmd == "reset":
             out.send(mido.Message("sysex", data=HDR + [0x06]))

@@ -27,7 +27,8 @@ What comes with it:
 The screenshots are the [Mirror](docs/modes.md#mirror) page showing the
 E16 live. Build the apps with `cmake -S apps -B build-apps && cmake --build
 build-apps`, copy an `.e16app` to `/apps/` in Disk mode, eject, and start
-it from the menu. Holding Shift 1 s goes back to the launcher.
+it from the menu. To go back to the launcher, hold Shift on its own for
+5 s and push encoder 1 at the prompt.
 
 <table>
 <tr>
@@ -171,12 +172,12 @@ half a press):
 |---|---|
 | Shift tap (release within 1 s, no encoder pressed meanwhile) | opens the page picker: press encoder N to show page N (`page.onPageChange`), or tap Shift again or wait 4 s to close it |
 | Shift + press encoder N (while Shift is held down) | shows page N directly, if the script has one, logged as `ui: page N (<name>) via shift+press` |
-| Shift hold 1 s (no encoder pressed during the hold) | back to the menu (unloads the script, saving vars and store) |
-| Shift + hold encoder 16 for 2 s | reboot into the bootloader, from anywhere |
+| **Leaving:** hold Shift on its own (no encoder pushed or turned) for 5 s | a prompt over the screen: push encoder 1 to go back to the menu (unloads the script, saving vars and store); let go of Shift, or wait 4 s, to stay. While it's up, input belongs to the prompt. The same leaves a native app, Disk mode and Webcam mode |
+| Shift + hold encoder 16 (alone) for 2 s | reboot into the bootloader, from anywhere |
 
 Turns are dropped while Shift is held — there's no Shift+turn gesture yet.
 On the error screen (a script that failed to load), pressing any encoder or
-holding Shift 1 s returns to the menu.
+leaving (Shift held 5 s, then encoder 1) returns to the menu.
 
 ## Documentation
 

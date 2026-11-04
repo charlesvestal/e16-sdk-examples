@@ -8,7 +8,8 @@ built-in synth. `docs/audio/drone-demo.wav` is 10 s of it, rendered on
 the host by `test/drone/drone_test.c --wav`.
 
 Install: copy `build-apps/drone.e16app` to `/apps/` in Disk mode, eject,
-start "drone" from the menu. Holding Shift 1 s goes back to the launcher.
+start "drone" from the menu. Hold Shift on its own for 5 s and push encoder 1 at the prompt to go
+back to the launcher (settings are saved on the way).
 
 ## The sound
 

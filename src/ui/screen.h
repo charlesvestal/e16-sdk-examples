@@ -72,4 +72,8 @@ void screen_draw_text(int x, int y, const char *s, bool invert);
 void screen_draw_title(const char *s);
 void screen_draw_rect(int x, int y, int w, int h);
 
+/* Draw the leave prompt (exit_prompt.h) over every screen, naming name
+ * (NULL: none), or stop. */
+void screen_prompt(bool on, const char *name);
+
 #endif

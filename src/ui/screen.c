@@ -3,6 +3,7 @@
  */
 #include "screen.h"
 #include "font.h"
+#include "exit_prompt.h"
 #include "port_e16.h"
 #include "port_e16_audio.h"
 #include "canvas.h"
@@ -34,6 +35,8 @@ static bool sent_valid;
 
 static screen_mode_t g_mode;
 static bool g_dirty;
+static bool g_prompt_on;          /* screen_prompt(): drawn over everything */
+static const char *g_prompt_name;
 static uint32_t g_last_frame;
 
 static int g_count, g_selected;     /* menu: scenes.h's entries */
@@ -488,6 +491,9 @@ void screen_flush(void)
     g_drawn_canvas = port_e16_canvas_version();
     g_audio_shown = port_e16_audio_running();
     render();
+    if (g_prompt_on) {
+        exit_prompt_draw(&fb[0][0], g_prompt_name, false);
+    }
     send();
     g_dirty = false;
 }
@@ -529,4 +535,11 @@ void screen_draw_title(const char *s)
 void screen_draw_rect(int x, int y, int w, int h)
 {
     fill_rect(x, y, w, h);
+}
+
+void screen_prompt(bool on, const char *name)
+{
+    g_prompt_on = on;
+    g_prompt_name = name;
+    g_dirty = true;
 }

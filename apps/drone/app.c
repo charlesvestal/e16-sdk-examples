@@ -10,7 +10,7 @@
  *   row 3 motion   9 drift rate   10 drift depth   11 evolve (push: hold)
  *                 12 level (push: mute)
  *   row 4 space   13 space (push: freeze)   14 decay   15 sub   16 air
- *   Shift held 1 s: back to the launcher (the launcher's own watch)
+ *   Shift held alone 5 s, then push 1: back to the launcher (its leave prompt)
  *
  * MIDI in (USB and TRS): a note-on sets the root (folded into C1-C6) and
  * swells brightness and level with its velocity; CCs set the macros
@@ -512,6 +512,13 @@ static void try_save(const char *why)
     }
 }
 
+/* The user confirmed the launcher's leave prompt: save, then exit (the
+ * launcher ends the app 1.5 s later either way). */
+static int leaving(void)
+{
+    return E16_API_HAS(api, exit_pending) && api->exit_pending();
+}
+
 static void save_poll(uint32_t shift_held_ms)
 {
     switch (drone_save_poll(&g_save, now_ms, shift_held_ms)) {
@@ -622,7 +629,7 @@ static void say(const char *a, const char *b)
     clear();
     text(0, 16, a, 1);
     text(0, 28, b, 1);
-    text(0, 48, "Hold Shift to leave", 1);
+    text(0, 48, "Hold Shift 5 s to leave", 1);
     api->display_present();
 }
 
@@ -649,19 +656,19 @@ int app_main(const e16_api_t *a)
             api->delay_ms(100);
     }
 
-    uint32_t frame_ms = 0, led_ms = 0, info_ms = 0, shift_t0 = 0;
-    int shift_was = 0;
+    uint32_t frame_ms = 0, led_ms = 0, info_ms = 0;
     for (;;) {
         now_ms = api->millis();
         int shift = api->shift_pressed();
-        if (shift && !shift_was)
-            shift_t0 = now_ms;
-        shift_was = shift;
 
         controls(shift);
         midi_in();
         /* (+1: a Shift down this very millisecond still counts as held) */
-        save_poll(shift ? now_ms - shift_t0 + 1u : 0u);
+        /* Leaving: the save core's "on the way out" attempt, then exit. */
+        int bye = leaving();
+        save_poll(bye ? DRONE_SAVE_SHIFT_MS : 0u);
+        if (bye)
+            api->exit(0);
 
         if (now_ms - info_ms >= 500u) {
             info_ms = now_ms;

@@ -31,6 +31,12 @@ const e16_api_t *app_api_init(void *ram, const char *name, uint32_t r9);
  * dump, the mirror): what the OLED shows. */
 const uint8_t *app_api_framebuffer(void);
 
+/* millis() when the app last presented a frame. */
+uint32_t app_api_last_present(void);
+/* Send the app's framebuffer again with the leave prompt over it (app
+ * mode's service, when the app isn't presenting; not during an api call). */
+void app_api_redraw(void);
+
 /* An input message for the app's midi_read() (app_mode_service()). */
 void app_api_midi_in(const midi_msg_t *msg);
 

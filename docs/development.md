@@ -13,7 +13,8 @@ tools/console.py turn N STEPS    # turn encoder N (1-16)
 tools/console.py press N         # press and release encoder N
 tools/console.py down N | up N   # N may be "shift"
 tools/console.py shift-tap       # open/close the page picker
-tools/console.py shift-hold [S]  # hold Shift (default 1.3 s: back to the menu)
+tools/console.py shift-hold [S]  # hold Shift S s (5+: the leave prompt)
+tools/console.py leave           # leave: Shift 5.3 s, then encoder 1 at the prompt
 tools/console.py pwm             # sample TRS 2's PWM duty 50x over 100 ms (synth activity proxy)
 tools/console.py reset           # reboot the launcher (like a power cycle)
 tools/console.py corrupt INDEX   # break scenes[INDEX]'s saved vars record

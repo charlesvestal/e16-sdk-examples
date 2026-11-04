@@ -246,6 +246,15 @@ typedef struct e16_api {
     /* Fills *info (as much as size bytes of it); returns 0 or E16_EARGS. */
     int (*audio_info)(e16_audio_info_t *info, uint32_t size);
 
+    /* ---- leaving (newer: check E16_API_HAS(api, exit_pending)) ---- */
+    /* 1 once the user has confirmed the launcher's leave prompt (Shift
+     * held on its own for 5 s, then encoder 1). Save what's worth keeping
+     * and call exit(): the launcher ends the app itself 1.5 s after the
+     * confirmation either way. While the prompt is up the app reads no
+     * input (enc_read 0, enc_pressed 0, shift_pressed 0); if the user
+     * lets go of Shift instead, it carries on as before. */
+    int (*exit_pending)(void);
+
     /* New entries go here, at the end, only. */
 } e16_api_t;
 

@@ -6,7 +6,7 @@
  *   encoder 1   speed (turn)
  *   encoder 2   palette: smooth, contour bands, inverted, 4 levels (turn)
  *   encoder 3   effect: plasma or tunnel (turn)
- *   Shift held 1 s: back to the launcher (the launcher's own watch)
+ *   Shift held alone 5 s, then push 1: back to the launcher (its leave prompt)
  *
  * The frame rate is drawn in the top-left corner and logged every 5 s.
  *
@@ -274,7 +274,7 @@ int app_main(const e16_api_t *api)
 {
     make_tables();
     unsigned char *fb = api->display_fb();
-    api->log("plasma: encoder 1 speed, 2 palette, 3 effect; hold Shift to leave");
+    api->log("plasma: encoder 1 speed, 2 palette, 3 effect; hold Shift 5 s to leave");
 
     unsigned frames = 0, fps = 0;
     unsigned t_fps = api->millis(), t_log = t_fps;

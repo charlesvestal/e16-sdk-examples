@@ -67,7 +67,7 @@ for host in $HOSTS; do
     # the scene provider, the synth voice, the mirror stream's core, webcam mode's video synth and its render-ahead bookkeeping, the drone and x0x engines, the app loader (given the
     # cross-built app, if any) and the app-mode boot decision. They don't depend on RT_TIME_FLOAT/double; each runs once per
     # build dir that has it.
-    for ctest in blockdev_test persist_test flash_budget_test fatfs_test disk_ops_test app_files_test scene_parse_test scenes_test voice_test app_stream_test drone_test x0x_test wc_render_test wc_ring_test mirror_test loader_test app_boot_test; do
+    for ctest in blockdev_test persist_test flash_budget_test fatfs_test disk_ops_test app_files_test scene_parse_test scenes_test voice_test app_stream_test drone_test x0x_test wc_render_test wc_ring_test exit_prompt_test mirror_test loader_test app_boot_test; do
         bin="$(dirname "$host")/$ctest"
         args=()
         [ "$ctest" = loader_test ] && args=("${APP_IMAGES[@]}")
