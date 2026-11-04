@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "exit_prompt.h"
+#include "font.h"
 
 static int g_fail, g_checks;
 #define CHECK(cond, ...)                                          \
@@ -107,11 +108,18 @@ int main(void)
     run(&p, 100, true, 0xFFFEu, true);
     CHECK(exit_prompt_active(&p) && n_leave == 0 && n_hide == 0, "others ignored");
 
-    /* drawing stays on the screen and leaves the corners */
+    /* every line fits the screen */
+    const char *lines[] = {EXIT_PROMPT_LINE1, EXIT_PROMPT_LINE2, EXIT_PROMPT_SAVING,
+                           "Release the buttons", "to leave"};
+    for (int i = 0; i < 5; i++)
+        CHECK(font_text_width(lines[i], 64) <= 124, "'%s' is %d px wide", lines[i],
+              font_text_width(lines[i], 64));
+    /* the prompt covers the screen: nothing of what was there shows */
     uint8_t fb[1024];
     memset(fb, 0xFF, sizeof fb);
     exit_prompt_draw(fb, "swell", false);
-    CHECK(fb[0] == 0xFF && fb[1023] == 0xFF, "corners untouched");
+    CHECK(fb[7 * 128 + 0] == 0 && fb[7 * 128 + 127] == 0, "the old screen is gone");
+    CHECK(fb[0] == 0xFF, "the title bar is lit");
     memset(fb, 0, sizeof fb);
     exit_prompt_draw(fb, "a-very-long-name-that-goes-on-and-on", true);
     exit_prompt_draw_release(fb);

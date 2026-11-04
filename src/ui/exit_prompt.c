@@ -108,23 +108,14 @@ static void centred(uint8_t *fb, int y, const char *s, bool on)
     text(fb, (W - w) / 2, y, s, 64, on);
 }
 
-static void box(uint8_t *fb, int x0, int y0, int x1, int y1)
-{
-    for (int y = y0; y <= y1; y++) {
-        for (int x = x0; x <= x1; x++) {
-            bool edge = y == y0 + 1 || y == y1 - 1 || x == x0 + 1 || x == x1 - 1;
-            px(fb, x, y, edge);
-        }
-    }
-}
-
 void exit_prompt_draw(uint8_t *fb, const char *name, bool confirmed)
 {
-    const int x0 = 4, y0 = 8, x1 = W - 5, y1 = 55;
-    box(fb, x0, y0, x1, y1);
-    /* the title in a lit bar: "Leave <name>?" */
-    for (int y = y0 + 3; y <= y0 + 13; y++) {
-        for (int x = x0 + 3; x <= x1 - 3; x++) {
+    /* the whole screen: a lit title bar, then the two answers */
+    for (int i = 0; i < W * H / 8; i++) {
+        fb[i] = 0;
+    }
+    for (int y = 0; y <= 12; y++) {
+        for (int x = 0; x < W; x++) {
             px(fb, x, y, true);
         }
     }
@@ -134,20 +125,26 @@ void exit_prompt_draw(uint8_t *fb, const char *name, bool confirmed)
     while (*lead && n < 30) {
         t[n++] = *lead++;
     }
+    /* the name, cut to what fits in the bar */
     for (const char *s = name ? name : "this"; *s && n < 30; s++) {
         t[n++] = *s;
+        t[n] = 0;
+        if (font_text_width(t, 64) > W - 12) {
+            n--;
+            break;
+        }
     }
     if (!confirmed) {
         t[n++] = '?';
     }
     t[n] = 0;
-    centred(fb, y0 + 5, t, false);
+    centred(fb, 3, t, false);
     if (confirmed) {
-        centred(fb, y0 + 22, "saving, one moment", true);
+        centred(fb, 30, EXIT_PROMPT_SAVING, true);
         return;
     }
-    centred(fb, y0 + 19, "Push encoder 1 to leave.", true);
-    centred(fb, y0 + 30, "Let go of Shift to stay.", true);
+    centred(fb, 24, EXIT_PROMPT_LINE1, true);
+    centred(fb, 40, EXIT_PROMPT_LINE2, true);
 }
 
 void exit_prompt_draw_release(uint8_t *fb)

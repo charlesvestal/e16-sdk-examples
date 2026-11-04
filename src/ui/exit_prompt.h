@@ -48,9 +48,15 @@ bool exit_prompt_active(const exit_prompt_t *p);
 
 void exit_prompt_reset(exit_prompt_t *p);
 
+/* The prompt's lines (each fits the 128-pixel screen; the host test
+ * checks). */
+#define EXIT_PROMPT_LINE1 "Push encoder 1: leave"
+#define EXIT_PROMPT_LINE2 "Let go of Shift: stay"
+#define EXIT_PROMPT_SAVING "saving, one moment"
+
 /* Draw the prompt over a 128x64 1-bit framebuffer in the SSD1306 page
- * layout (byte = 8 rows of one column, bit 0 on top; 8 pages of 128).
- * name: what's being left ("swell", "Euclid"; NULL for none);
+ * layout (byte = 8 rows of one column, bit 0 on top; 8 pages of 128),
+ * covering all of it. name: what's being left ("swell", "Euclid"; NULL for none);
  * confirmed: "Leaving..." instead of the question. */
 void exit_prompt_draw(uint8_t *fb, const char *name, bool confirmed);
 
